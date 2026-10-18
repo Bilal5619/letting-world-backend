@@ -1,0 +1,331 @@
+/*
+ * Letting World — admin panel design system.
+ * Semantic tokens (canvas, surface, ink, line, tones) switch between light and dark;
+ * utilities like bg-surface / text-ink / border-line read them, so pages never hard-code colours.
+ */
+@import 'tailwindcss';
+
+@source '../views/admin';
+@source '../views/components/admin';
+@source '../../app/Support/AdminUi.php';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+    color-scheme: light;
+    --lw-canvas: #f3f5f9;
+    --lw-surface: #ffffff;
+    --lw-raised: #f7f9fc;
+    --lw-line: #e4e8ef;
+    --lw-line-strong: #cdd5e0;
+    --lw-ink: #0e1a2b;
+    --lw-ink-2: #4b5b71;
+    --lw-muted: #7f8ea3;
+    --lw-brand: #0b2a5b;
+    --lw-brand-2: #1d4384;
+    --lw-accent: #2459c9;
+    --lw-accent-soft: #ebf1fd;
+    --lw-ok: #127a4a;
+    --lw-ok-soft: #e6f5ee;
+    --lw-warn: #9a5405;
+    --lw-warn-soft: #fff3df;
+    --lw-bad: #b42318;
+    --lw-bad-soft: #fdeceb;
+    --lw-info: #2459c9;
+    --lw-info-soft: #ebf1fd;
+    --lw-violet: #6236c9;
+    --lw-violet-soft: #f1ecfe;
+    --lw-neutral: #4b5b71;
+    --lw-neutral-soft: #eef1f5;
+    --lw-shadow: 0 1px 2px rgb(14 26 43 / 0.04), 0 1px 1px rgb(14 26 43 / 0.03);
+    --lw-shadow-lg: 0 24px 48px -12px rgb(11 42 91 / 0.18), 0 4px 12px rgb(14 26 43 / 0.06);
+
+    /* Charts — validated with the dataviz palette checks (light surface #fff). */
+    --chart-bar: #2f5fb8;
+    --chart-grid: #e8ecf2;
+    --seg-valid: #1a8f5a;
+    --seg-booked: #2f6fde;
+    --seg-expiring: #e3a008;
+    --seg-missing: #8b5cf6;
+    --seg-expired: #d03b3b;
+}
+
+.dark {
+    color-scheme: dark;
+    --lw-canvas: #070d1a;
+    --lw-surface: #0e1729;
+    --lw-raised: #121d33;
+    --lw-line: #1d2a42;
+    --lw-line-strong: #2b3b58;
+    --lw-ink: #e7edf7;
+    --lw-ink-2: #a9b6ca;
+    --lw-muted: #7587a1;
+    --lw-brand: #0b2a5b;
+    --lw-brand-2: #1d4384;
+    --lw-accent: #7aa5f7;
+    --lw-accent-soft: rgb(122 165 247 / 0.14);
+    --lw-ok: #4fcf93;
+    --lw-ok-soft: rgb(79 207 147 / 0.13);
+    --lw-warn: #f2b84b;
+    --lw-warn-soft: rgb(242 184 75 / 0.13);
+    --lw-bad: #f47c71;
+    --lw-bad-soft: rgb(244 124 113 / 0.13);
+    --lw-info: #7aa5f7;
+    --lw-info-soft: rgb(122 165 247 / 0.14);
+    --lw-violet: #b9a1ff;
+    --lw-violet-soft: rgb(185 161 255 / 0.14);
+    --lw-neutral: #a9b6ca;
+    --lw-neutral-soft: rgb(169 182 202 / 0.12);
+    --lw-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    --lw-shadow-lg: 0 24px 48px -12px rgb(0 0 0 / 0.6), 0 4px 12px rgb(0 0 0 / 0.3);
+
+    /* Charts — validated against the dark surface #111b2e. */
+    --chart-bar: #5b8def;
+    --chart-grid: #1b2840;
+    --seg-valid: #22a06b;
+    --seg-booked: #4c8df6;
+    --seg-expiring: #c98500;
+    --seg-missing: #9f7aea;
+    --seg-expired: #e5534b;
+}
+
+@theme inline {
+    --color-canvas: var(--lw-canvas);
+    --color-surface: var(--lw-surface);
+    --color-raised: var(--lw-raised);
+    --color-line: var(--lw-line);
+    --color-line-strong: var(--lw-line-strong);
+    --color-ink: var(--lw-ink);
+    --color-ink-2: var(--lw-ink-2);
+    --color-muted: var(--lw-muted);
+    --color-brand: var(--lw-brand);
+    --color-brand-2: var(--lw-brand-2);
+    --color-accent: var(--lw-accent);
+    --color-accent-soft: var(--lw-accent-soft);
+    --color-ok: var(--lw-ok);
+    --color-ok-soft: var(--lw-ok-soft);
+    --color-warn: var(--lw-warn);
+    --color-warn-soft: var(--lw-warn-soft);
+    --color-bad: var(--lw-bad);
+    --color-bad-soft: var(--lw-bad-soft);
+    --color-info: var(--lw-info);
+    --color-info-soft: var(--lw-info-soft);
+    --color-violet: var(--lw-violet);
+    --color-violet-soft: var(--lw-violet-soft);
+    --color-neutral: var(--lw-neutral);
+    --color-neutral-soft: var(--lw-neutral-soft);
+}
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+@layer base {
+    html {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+    }
+    body {
+        background: var(--lw-canvas);
+        color: var(--lw-ink);
+        font-feature-settings: 'ss01', 'cv11';
+    }
+    [x-cloak] {
+        display: none !important;
+    }
+    ::selection {
+        background: rgb(36 89 201 / 0.18);
+    }
+    :focus-visible {
+        outline: 2px solid var(--lw-accent);
+        outline-offset: 2px;
+        border-radius: 6px;
+    }
+}
+
+@layer components {
+    /* Cards */
+    .lw-card {
+        @apply rounded-2xl border border-line bg-surface;
+        box-shadow: var(--lw-shadow);
+    }
+    .lw-card-head {
+        @apply flex items-center justify-between gap-4 border-b border-line px-5 py-4;
+    }
+    .lw-card-title {
+        @apply text-[15px] font-semibold tracking-[-0.01em] text-ink;
+    }
+
+    /* Buttons */
+    .lw-btn {
+        @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-medium whitespace-nowrap transition
+            disabled:cursor-not-allowed disabled:opacity-50;
+    }
+    .lw-btn-sm {
+        @apply h-8 rounded-md px-2.5 text-[13px];
+    }
+    .lw-btn-primary {
+        @apply bg-brand text-white hover:bg-brand-2;
+        box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 1px 2px rgb(11 42 91 / 0.25);
+    }
+    .dark .lw-btn-primary {
+        @apply bg-accent text-[#06122a] hover:brightness-110;
+    }
+    .lw-btn-secondary {
+        @apply border border-line bg-surface text-ink hover:border-line-strong hover:bg-raised;
+        box-shadow: var(--lw-shadow);
+    }
+    .lw-btn-ghost {
+        @apply text-ink-2 hover:bg-neutral-soft hover:text-ink;
+    }
+    .lw-btn-danger {
+        @apply bg-bad text-white hover:brightness-110;
+    }
+    .dark .lw-btn-danger {
+        @apply text-[#2a0805];
+    }
+
+    /* Form controls */
+    .lw-label {
+        @apply mb-1.5 block text-[13px] font-medium text-ink;
+    }
+    .lw-input {
+        @apply block h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink transition placeholder:text-muted
+            hover:border-line-strong focus:border-accent focus:outline-none;
+        box-shadow: var(--lw-shadow);
+    }
+    .lw-input:focus {
+        box-shadow: 0 0 0 4px var(--lw-accent-soft);
+    }
+    textarea.lw-input {
+        @apply h-auto py-2.5;
+    }
+    .lw-input[aria-invalid='true'] {
+        @apply border-bad;
+    }
+    .lw-hint {
+        @apply mt-1.5 text-xs text-muted;
+    }
+    .lw-error {
+        @apply mt-1.5 text-xs font-medium text-bad;
+    }
+
+    /* Tables */
+    .lw-table {
+        @apply w-full min-w-[640px] border-separate border-spacing-0 text-sm;
+    }
+    .lw-table thead th {
+        @apply sticky top-0 z-10 border-b border-line bg-raised px-4 py-2.5 text-left text-[11px] font-semibold tracking-[0.06em] text-muted uppercase;
+    }
+    .lw-table thead th:first-child {
+        @apply pl-5;
+    }
+    .lw-table tbody td {
+        @apply border-b border-line px-4 py-3 align-middle text-ink-2;
+    }
+    .lw-table tbody td:first-child {
+        @apply pl-5;
+    }
+    .lw-table tbody tr:last-child td {
+        @apply border-b-0;
+    }
+    .lw-table tbody tr {
+        @apply transition-colors;
+    }
+    .lw-table tbody tr[data-href] {
+        @apply cursor-pointer;
+    }
+    .lw-table tbody tr:hover td {
+        @apply bg-raised;
+    }
+    .lw-num {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Status badges: icon + label, tinted by tone. */
+    .lw-badge {
+        @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap;
+    }
+    .tone-ok {
+        @apply bg-ok-soft text-ok;
+    }
+    .tone-warn {
+        @apply bg-warn-soft text-warn;
+    }
+    .tone-bad {
+        @apply bg-bad-soft text-bad;
+    }
+    .tone-info {
+        @apply bg-info-soft text-info;
+    }
+    .tone-violet {
+        @apply bg-violet-soft text-violet;
+    }
+    .tone-neutral {
+        @apply bg-neutral-soft text-neutral;
+    }
+
+    .lw-link {
+        @apply font-medium text-ink decoration-line-strong underline-offset-4 hover:text-accent hover:underline;
+    }
+    .lw-kbd {
+        @apply inline-flex h-5 min-w-5 items-center justify-center rounded border border-white/15 bg-white/10 px-1 font-mono text-[10px] text-white/70;
+    }
+    .lw-mono {
+        @apply font-mono text-[12.5px] tracking-tight;
+    }
+
+    /* Sidebar */
+    .lw-sidebar {
+        background:
+            radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.05) 1px, transparent 0) 0 0 / 18px 18px,
+            linear-gradient(180deg, #0b2a5b 0%, #08214a 55%, #061a3a 100%);
+    }
+    .dark .lw-sidebar {
+        background:
+            radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.04) 1px, transparent 0) 0 0 / 18px 18px,
+            linear-gradient(180deg, #0a1730 0%, #070f22 100%);
+        box-shadow: inset -1px 0 0 rgb(255 255 255 / 0.06);
+    }
+    .lw-nav-item {
+        @apply relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] font-medium text-white/65 transition hover:bg-white/[0.06] hover:text-white;
+    }
+    .lw-nav-item[aria-current='page'] {
+        @apply bg-white/[0.1] text-white;
+        box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+    }
+    .lw-nav-item[aria-current='page']::before {
+        content: '';
+        @apply absolute top-2 bottom-2 -left-3 w-[3px] rounded-r-full bg-[#7aa5f7];
+    }
+
+    /* Charts */
+    .lw-bar {
+        fill: var(--chart-bar);
+        transition: opacity 0.15s;
+    }
+    .lw-chart:hover .lw-bar:not(:hover) {
+        opacity: 0.55;
+    }
+}
+
+@keyframes lw-rise {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+.lw-rise {
+    animation: lw-rise 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+    .lw-rise {
+        animation: none;
+    }
+}
