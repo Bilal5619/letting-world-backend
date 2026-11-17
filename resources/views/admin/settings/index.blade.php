@@ -49,13 +49,13 @@
                             @foreach ($elevenDone['services'] as $s)
                                 <tr>
                                     <td class="font-medium text-ink">{{ $s['label'] }}</td>
-                                    <td><span class="lw-mono">#{{ $s['id'] }}</span>@if (isset($test['names'][$s['id']])) <span class="text-muted">· {{ $test['names'][$s['id']] }}</span>@endif</td>
+                                    <td><span class="lw-mono">#{{ $s['id'] }}</span>@if (isset($test['names'][$s['id']])) <span class="text-muted">· {{ $test['names'][$s['id']] }}</span>@elseif ($test['ok'] ?? false) <span class="font-medium text-bad">· Not offered by 11Done (wrong ID or switched off). Booked by your team until fixed.</span>@endif</td>
                                 </tr>
                             @endforeach
                         </tbody>
                     </table>
                 </div>
-                <p class="mt-2 text-xs text-muted">Run “Test connection” to see 11Done’s service names. Mapping is set in config/lettingworld.php (or ELEVENDONE_SERVICE_* in .env).</p>
+                <p class="mt-2 text-xs text-muted">Run “Test connection” to see 11Done’s service names. Mapping is set in config/lettingworld.php (or ELEVENDONE_SERVICE_* in .env, e.g. ELEVENDONE_SERVICE_PAT=76).</p>
             </x-admin.card>
 
             {{-- Team-arranged services --}}
@@ -100,6 +100,19 @@
 
         <div class="space-y-4">
             <x-admin.card title="Other services" icon="settings">
+                <x-slot:actions>
+                    <form method="POST" action="{{ route('admin.settings.stripe.test') }}">@csrf
+                        <x-admin.button type="submit" size="sm" icon="activity">Test Stripe</x-admin.button>
+                    </form>
+                </x-slot:actions>
+
+                @if ($stripeTest)
+                    <div class="mb-4 flex items-start gap-3 rounded-xl px-4 py-3 text-sm {{ $stripeTest['ok'] ? 'bg-ok-soft text-ok' : 'bg-bad-soft text-bad' }}">
+                        <x-admin.icon :name="$stripeTest['ok'] ? 'circle-check' : 'triangle-alert'" class="mt-0.5 size-4 shrink-0" />
+                        <p class="min-w-0 break-words">{{ $stripeTest['message'] }}</p>
+                    </div>
+                @endif
+
                 <dl>
                     <x-admin.kv label="Card payments (Stripe)"><span class="lw-badge {{ $stripe ? 'tone-ok' : 'tone-warn' }}">{{ $stripe ? 'Live' : 'Keys not set' }}</span></x-admin.kv>
                     <x-admin.kv label="Email sending"><span class="lw-badge {{ in_array($mail, ['log', 'array']) ? 'tone-warn' : 'tone-ok' }}">{{ in_array($mail, ['log', 'array']) ? 'Logged only ('.$mail.')' : strtoupper($mail) }}</span></x-admin.kv>

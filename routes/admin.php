@@ -72,6 +72,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::controller(SettingsController::class)->prefix('settings')->name('settings.')->group(function () {
         Route::get('/', 'index')->name('index');
         Route::post('elevendone/test', 'testElevenDone')->name('elevendone.test');
+        Route::post('stripe/test', 'testStripe')->name('stripe.test');
         Route::post('admins', 'storeAdmin')->name('admins.store');
         Route::post('admins/{admin}/toggle', 'toggleAdmin')->name('admins.toggle');
         Route::put('password', 'updatePassword')->name('password');

@@ -3,8 +3,12 @@
 namespace App\Support;
 
 use App\Models\User;
+use Stripe\Exception\ApiConnectionException;
 use Stripe\Exception\ApiErrorException;
+use Stripe\Exception\AuthenticationException;
 use Stripe\Exception\CardException;
+use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\PermissionException;
 use Stripe\StripeClient;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -31,7 +35,15 @@ class Payments
         }
 
         return $this->call(function (StripeClient $s) use ($user) {
-            $methods = $s->customers->allPaymentMethods($user->stripe_customer_id, ['type' => 'card', 'limit' => 20])->data;
+            try {
+                $methods = $s->customers->allPaymentMethods($user->stripe_customer_id, ['type' => 'card', 'limit' => 20])->data;
+            } catch (InvalidRequestException $e) {
+                // Customer from other Stripe keys: no cards here; adding one makes a new customer.
+                if ($e->getStripeCode() === 'resource_missing') {
+                    return [];
+                }
+                throw $e;
+            }
             if (! $methods) {
                 return [];
             }
@@ -138,16 +150,71 @@ class Payments
 
     private function customerId(User $user, StripeClient $stripe): string
     {
-        if (! $user->stripe_customer_id) {
-            $customer = $stripe->customers->create([
-                'email' => $user->email,
-                'name' => trim("{$user->first_name} {$user->last_name}"),
-                'metadata' => ['user_id' => $user->id],
-            ]);
-            $user->forceFill(['stripe_customer_id' => $customer->id])->save();
+        if ($user->stripe_customer_id) {
+            try {
+                if (! ($stripe->customers->retrieve($user->stripe_customer_id)->deleted ?? false)) {
+                    return $user->stripe_customer_id;
+                }
+            } catch (InvalidRequestException $e) {
+                if ($e->getStripeCode() !== 'resource_missing') {
+                    throw $e;
+                }
+            }
+            // Saved under other Stripe keys (e.g. test keys before going live) or deleted in
+            // Stripe: start a fresh customer rather than failing every time.
         }
 
-        return $user->stripe_customer_id;
+        $customer = $stripe->customers->create([
+            'email' => $user->email,
+            'name' => trim("{$user->first_name} {$user->last_name}"),
+            'metadata' => ['user_id' => $user->id],
+        ]);
+        $user->forceFill(['stripe_customer_id' => $customer->id])->save();
+
+        return $customer->id;
+    }
+
+    /**
+     * Checks the Stripe keys with a harmless read (admin panel "Test Stripe").
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function check(): array
+    {
+        $secret = (string) config('services.stripe.secret');
+        $key = (string) config('services.stripe.key');
+
+        if ($secret === '' || $key === '') {
+            return ['ok' => false, 'message' => 'Stripe keys are not set. Add STRIPE_KEY (pk_...) and STRIPE_SECRET (sk_...) to .env, then run php artisan config:clear.'];
+        }
+        if (! str_starts_with($key, 'pk_')) {
+            return ['ok' => false, 'message' => 'STRIPE_KEY should be the publishable key and start with pk_.'];
+        }
+        if (! str_starts_with($secret, 'sk_') && ! str_starts_with($secret, 'rk_')) {
+            return ['ok' => false, 'message' => 'STRIPE_SECRET should be the secret key and start with sk_.'];
+        }
+        if (str_contains($key, '_test_') !== str_contains($secret, '_test_')) {
+            return ['ok' => false, 'message' => 'One Stripe key is a test key and the other is live. Both must be test keys or both live keys.'];
+        }
+
+        try {
+            (new StripeClient($secret))->balance->retrieve();
+        } catch (ApiErrorException $e) {
+            return ['ok' => false, 'message' => $this->explain($e).' Stripe said: '.$e->getMessage()];
+        }
+
+        return ['ok' => true, 'message' => 'Connected to Stripe ('.(str_contains($secret, '_test_') ? 'test mode' : 'live mode').'). Cards can be added.'];
+    }
+
+    /** What went wrong, in words a landlord (or the admin) can act on. */
+    private function explain(ApiErrorException $e): string
+    {
+        return match (true) {
+            $e instanceof AuthenticationException => 'Card payments are not set up correctly: the Stripe secret key was rejected.',
+            $e instanceof PermissionException => 'Card payments are not set up correctly: the Stripe key does not have permission for this.',
+            $e instanceof ApiConnectionException => 'The payment provider could not be reached. Please try again.',
+            default => 'The payment provider returned an error. Please try again.',
+        };
     }
 
     /** Never let one landlord touch another customer's card. */
@@ -165,7 +232,7 @@ class Payments
             return $fn(new StripeClient(config('services.stripe.secret')));
         } catch (ApiErrorException $e) {
             report($e);
-            abort(502, 'The payment provider could not be reached. Please try again.');
+            abort(502, $this->explain($e));
         }
     }
 }

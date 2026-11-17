@@ -230,17 +230,7 @@ class BookingController extends Controller
 
         // Services 11Done doesn't offer are arranged by the Letting World team (admin panel).
         if (! $serviceId) {
-            $price = config("lettingworld.service_prices.$type");
-
-            return [
-                'provider' => 'letting_world',
-                'service_id' => null,
-                'price' => $price !== null ? (float) $price : null,
-                'bookable' => $price !== null,
-                'reason' => $price !== null ? null : Certificate::typeLabel($type).' can’t be booked online yet.',
-                'min_date' => today()->addDays((int) config('lettingworld.manual_min_days'))->toDateString(),
-                'time_slots' => Booking::TIME_SLOTS,
-            ];
+            return $this->teamArranged($type);
         }
 
         try {
@@ -249,6 +239,14 @@ class BookingController extends Controller
                 'property_type' => $property->property_type,
             ]));
         } catch (RuntimeException $e) {
+            // 404: 11Done doesn't offer this service ID (wrong ELEVENDONE_SERVICE_* or switched off
+            // in 11Done). The landlord can still book it; the team arranges it instead.
+            if ($e->getCode() === 404 && config("lettingworld.service_prices.$type") !== null) {
+                report($e);
+
+                return $this->teamArranged($type);
+            }
+
             return [
                 'provider' => '11done', 'service_id' => $serviceId, 'price' => null, 'bookable' => false,
                 'reason' => $e->getMessage(), 'min_date' => today()->addDays(3)->toDateString(), 'time_slots' => Booking::TIME_SLOTS,
@@ -266,6 +264,22 @@ class BookingController extends Controller
             'reason' => $quote['reason'] ?? null,
             'min_date' => $quote['min_date'] ?? today()->addDays(3)->toDateString(),
             'time_slots' => $quote['time_slots'] ?? Booking::TIME_SLOTS,
+        ];
+    }
+
+    /** A renewal the Letting World team arranges at its own price. */
+    private function teamArranged(string $type): array
+    {
+        $price = config("lettingworld.service_prices.$type");
+
+        return [
+            'provider' => 'letting_world',
+            'service_id' => null,
+            'price' => $price !== null ? (float) $price : null,
+            'bookable' => $price !== null,
+            'reason' => $price !== null ? null : Certificate::typeLabel($type).' can’t be booked online yet.',
+            'min_date' => today()->addDays((int) config('lettingworld.manual_min_days'))->toDateString(),
+            'time_slots' => Booking::TIME_SLOTS,
         ];
     }
 

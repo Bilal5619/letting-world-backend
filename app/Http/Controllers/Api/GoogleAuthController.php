@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -21,10 +22,20 @@ use Throwable;
  */
 class GoogleAuthController extends Controller
 {
+    /** Lets the app hide "Continue with Google" until GOOGLE_CLIENT_ID / SECRET are set. */
+    public function status(): JsonResponse
+    {
+        return response()->json(['enabled' => $this->configured()]);
+    }
+
     public function redirect(Request $request): RedirectResponse
     {
         $appRedirect = (string) $request->query('redirect_uri');
         abort_unless($this->isAllowedAppRedirect($appRedirect), 422, 'Invalid redirect_uri.');
+
+        if (! $this->configured()) {
+            return $this->backToApp($appRedirect, ['error' => 'Google sign-in is not available yet. Please log in with your email and password.']);
+        }
 
         // The app's return URL travels through Google inside an encrypted state value.
         return Socialite::driver('google')
@@ -89,6 +100,11 @@ class GoogleAuthController extends Controller
         $user->forceFill(['last_login_at' => now()])->save();
 
         return $this->backToApp($appRedirect, ['token' => $user->createToken('mobile')->plainTextToken]);
+    }
+
+    private function configured(): bool
+    {
+        return filled(config('services.google.client_id')) && filled(config('services.google.client_secret'));
     }
 
     private function isAllowedAppRedirect(string $url): bool

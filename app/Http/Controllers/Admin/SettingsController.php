@@ -35,6 +35,7 @@ class SettingsController extends Controller
                 'lastSync' => Booking::max('synced_at'),
             ],
             'test' => session('elevenDoneTest'),
+            'stripeTest' => session('stripeTest'),
             'manualServices' => collect(config('lettingworld.service_prices'))
                 ->reject(fn ($price, $type) => $elevenDone->enabled() && $elevenDone->serviceFor($type))
                 ->map(fn ($price, $type) => ['label' => Certificate::typeLabel($type), 'price' => (float) $price]),
@@ -65,6 +66,11 @@ class SettingsController extends Controller
             'message' => 'Connected. 11Done offers '.count($data['services'] ?? []).' bookable services.',
             'names' => collect($data['services'] ?? [])->pluck('name', 'id')->all(),
         ]);
+    }
+
+    public function testStripe(Payments $payments): RedirectResponse
+    {
+        return back()->with('stripeTest', $payments->check());
     }
 
     public function storeAdmin(Request $request): RedirectResponse

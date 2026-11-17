@@ -40,6 +40,9 @@ class ElevenDoneIntegrationTest extends TestCase
 
     private bool $elevenDoneDown = false;
 
+    /** 11Done answers quotes with "This 11Done service is not available." (404). */
+    private bool $serviceMissing = false;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -71,6 +74,9 @@ class ElevenDoneIntegrationTest extends TestCase
             // Outage hits the hand-over only, so the landlord can still see a price and pay.
             if ($this->elevenDoneDown && ! str_ends_with($url, '/quote')) {
                 throw new ConnectionException('down');
+            }
+            if (str_ends_with($url, '/quote') && $this->serviceMissing) {
+                return Http::response(['success' => false, 'message' => 'This 11Done service is not available.'], 404);
             }
             if (str_ends_with($url, '/quote')) {
                 return Http::response(['success' => true, 'data' => [
@@ -136,6 +142,28 @@ class ElevenDoneIntegrationTest extends TestCase
         Http::assertSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/quote')
             && $r->hasHeader('X-Partner-Key', 'partner-key')
             && $r['service_id'] === 60 && $r['postcode'] === 'G1 1AA' && $r['property']['bedrooms'] === 2);
+    }
+
+    public function test_a_service_11done_does_not_offer_is_booked_by_the_team_instead(): void
+    {
+        $this->serviceMissing = true;
+
+        $this->actingAs($this->landlord)
+            ->getJson("/api/bookings/quote?propertyId={$this->property->id}&serviceType=pat")
+            ->assertOk()
+            ->assertJsonPath('provider', 'letting_world')
+            ->assertJsonPath('price', 79)
+            ->assertJsonPath('bookable', true)
+            ->assertJsonPath('unavailableReason', null);
+
+        $this->book([
+            'serviceType' => 'pat',
+            'preferredDate' => today()->addDays((int) config('lettingworld.manual_min_days'))->toDateString(),
+        ])->assertCreated()->assertJsonPath('paymentStatus', 'paid');
+
+        $this->assertSame('letting_world', Booking::where('service_type', 'pat')->sole()->provider);
+        $this->assertSame(7900, $this->payments->charges[0]['amountPence']);
+        $this->assertSame([], $this->created, 'Nothing is sent to 11Done for a team-arranged booking');
     }
 
     public function test_after_payment_the_booking_is_created_in_11done(): void
