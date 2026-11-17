@@ -79,7 +79,10 @@ class Payments
             $ephemeralKey = $s->ephemeralKeys->create(['customer' => $customerId], ['stripe_version' => self::EPHEMERAL_KEY_VERSION]);
             $setupIntent = $s->setupIntents->create([
                 'customer' => $customerId,
-                'payment_method_types' => ['card'],
+                'automatic_payment_methods' => [
+    'enabled' => true,
+    'allow_redirects' => 'never',
+],
                 'usage' => 'off_session', // allows one-click renewals to charge it later
             ]);
 
