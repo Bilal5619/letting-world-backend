@@ -67,6 +67,7 @@ class ElevenDoneSync
                     'bedrooms' => $property->bedrooms,
                     'property_type' => $property->property_type,
                 ],
+                'answers' => $booking->service_answers ?: null,
                 'tenant' => $tenant ? array_filter([
                     'name' => trim("{$tenant->first_name} {$tenant->last_name}"),
                     'email' => $tenant->email,

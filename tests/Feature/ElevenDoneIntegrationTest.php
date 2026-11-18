@@ -43,6 +43,9 @@ class ElevenDoneIntegrationTest extends TestCase
     /** 11Done answers quotes with "This 11Done service is not available." (404). */
     private bool $serviceMissing = false;
 
+    /** 11Done prices like its live PAT form: Domestic from the property, appliances asked (Q16). */
+    private bool $withQuestions = false;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -77,6 +80,27 @@ class ElevenDoneIntegrationTest extends TestCase
             }
             if (str_ends_with($url, '/quote') && $this->serviceMissing) {
                 return Http::response(['success' => false, 'message' => 'This 11Done service is not available.'], 404);
+            }
+            if (str_ends_with($url, '/quote') && $this->withQuestions) {
+                $appliances = $request['answers'][16] ?? null;
+                $price = ['629' => 50.0, '630' => 75.0][$appliances] ?? null;
+
+                return Http::response(['success' => true, 'data' => [
+                    'service_id' => 91, 'service_name' => 'PAT (Portable Appliance Test)', 'price' => $price, 'bookable' => $price !== null,
+                    'reason' => $price === null ? 'Answer the questions to see the price.' : null, 'needs_answers' => $price === null,
+                    'answers' => array_filter([14 => '496', 16 => $price !== null ? $appliances : null]),
+                    'from_property' => [['question' => 'Choose property type', 'answer' => 'Domestic']],
+                    'questions' => [[
+                        'id' => 16, 'title' => 'Choose number of Appliances', 'type' => 'select', 'required' => true,
+                        'options' => [
+                            ['id' => '629', 'label' => 'Appliances 1 to 10', 'price' => 50, 'quote_only' => false],
+                            ['id' => '630', 'label' => 'Appliances 11 to 20', 'price' => 75, 'quote_only' => false],
+                        ],
+                        'min' => null, 'max' => null, 'unit_price' => null, 'answer' => $price !== null ? $appliances : null,
+                    ]],
+                    'min_date' => today()->addDays(3)->toDateString(),
+                    'time_slots' => ['08:00 AM - 10:00 AM', '10:00 AM - 12:00 PM', '02:00 PM - 04:00 PM', '04:00 PM - 06:00 PM'],
+                ]]);
             }
             if (str_ends_with($url, '/quote')) {
                 return Http::response(['success' => true, 'data' => [
@@ -142,6 +166,43 @@ class ElevenDoneIntegrationTest extends TestCase
         Http::assertSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/quote')
             && $r->hasHeader('X-Partner-Key', 'partner-key')
             && $r['service_id'] === 60 && $r['postcode'] === 'G1 1AA' && $r['property']['bedrooms'] === 2);
+    }
+
+    public function test_the_landlord_answers_11done_questions_once_and_they_are_reused_next_time(): void
+    {
+        $this->withQuestions = true;
+        $quote = fn (?array $answers = null) => $this->actingAs($this->landlord)->postJson('/api/bookings/quote', array_filter([
+            'propertyId' => $this->property->id, 'serviceType' => 'pat', 'answers' => $answers,
+        ], fn ($v) => $v !== null));
+
+        // First time: property type comes from the property, appliances still to answer.
+        $quote()->assertOk()
+            ->assertJsonPath('bookable', false)
+            ->assertJsonPath('needsAnswers', true)
+            ->assertJsonPath('price', null)
+            ->assertJsonPath('fromProperty.0.answer', 'Domestic')
+            ->assertJsonPath('questions.0.id', '16')
+            ->assertJsonPath('questions.0.options.1.label', 'Appliances 11 to 20');
+
+        $quote([16 => '630'])->assertOk()->assertJsonPath('bookable', true)->assertJsonPath('price', 75);
+
+        $this->book([
+            'serviceType' => 'pat', 'answers' => [16 => '630'],
+        ])->assertCreated()->assertJsonPath('paymentStatus', 'paid');
+
+        $booking = Booking::where('service_type', 'pat')->sole();
+        $this->assertSame([14 => '496', 16 => '630'], $booking->service_answers);
+        $this->assertSame(7500, $this->payments->charges[0]['amountPence']);
+        $this->assertSame(['14' => '496', '16' => '630'], $this->created[0]['answers'], '11Done gets the same answers');
+
+        // Next renewal: last time's answers are used, so it's one tap again.
+        $booking->update(['status' => 'completed']);
+        $this->actingAs($this->landlord)
+            ->getJson("/api/bookings/quote?propertyId={$this->property->id}&serviceType=pat")
+            ->assertOk()
+            ->assertJsonPath('bookable', true)
+            ->assertJsonPath('price', 75)
+            ->assertJsonPath('answers.16', '630');
     }
 
     public function test_a_service_11done_does_not_offer_is_booked_by_the_team_instead(): void

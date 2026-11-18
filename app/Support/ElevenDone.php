@@ -34,13 +34,15 @@ class ElevenDone
         return $this->data($this->http()->get('services'));
     }
 
-    public function quote(int $serviceId, string $postcode, array $property): array
+    /** @param  array<int|string, mixed>  $answers  the landlord's answers to 11Done's booking questions */
+    public function quote(int $serviceId, string $postcode, array $property, array $answers = []): array
     {
-        return $this->data($this->http()->post('quote', [
+        return $this->data($this->http()->post('quote', array_filter([
             'service_id' => $serviceId,
             'postcode' => $postcode,
             'property' => $property,
-        ]));
+            'answers' => $answers ?: null,
+        ], fn ($v) => $v !== null)));
     }
 
     /** Creates (or, for a repeated reference, returns) the paid booking in 11Done. */

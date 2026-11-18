@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 #[Fillable([
     'property_id', 'certificate_id', 'result_certificate_id', 'service_type', 'preferred_date', 'scheduling',
     'time_slot', 'access', 'access_notes', 'notify_tenant', 'status', 'price', 'payment_status',
-    'payment_intent_id', 'card_brand', 'card_last4', 'provider', 'provider_service_id', 'provider_reference',
+    'payment_intent_id', 'card_brand', 'card_last4', 'provider', 'provider_service_id', 'service_answers', 'provider_reference',
     'provider_status', 'sync_status', 'sync_error', 'sync_attempts', 'synced_at', 'engineer_name',
     'scheduled_date', 'scheduled_slot', 'completed_at', 'cancelled_at', 'admin_notes',
 ])]
@@ -27,6 +27,7 @@ class Booking extends Model
             'preferred_date' => 'date:Y-m-d',
             'notify_tenant' => 'boolean',
             'price' => 'float',
+            'service_answers' => 'array',
             'cancelled_at' => 'datetime',
             'scheduled_date' => 'date:Y-m-d',
             'completed_at' => 'datetime',

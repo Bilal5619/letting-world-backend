@@ -69,12 +69,17 @@ class BookingController extends Controller
             'propertyId' => ['required'],
             'serviceType' => ['required', Rule::in(array_keys(config('lettingworld.certificate_types')))],
             'certificateId' => ['nullable'],
+            'answers' => ['nullable', 'array'],
         ]);
 
         $property = $landlord->properties()->active()->with('tenants')->findOrFail($data['propertyId']);
         $certificate = $this->certificateFor($property, $data['serviceType'], $data['certificateId'] ?? null);
         $card = $this->payments->defaultCard($landlord);
-        $pricing = $this->pricing($property, $data['serviceType']);
+        // First look at the screen: start from what the landlord answered last time here.
+        $answers = $request->has('answers')
+            ? ($data['answers'] ?? [])
+            : $this->lastAnswers($landlord, $property->id, $data['serviceType']);
+        $pricing = $this->pricing($property, $data['serviceType'], $answers);
         $tenantContact = $property->tenants->first(fn (User $t) => filled($t->email) || filled($t->phone));
 
         return response()->json([
@@ -93,6 +98,11 @@ class BookingController extends Controller
             'price' => $pricing['price'],
             'bookable' => $pricing['bookable'],
             'unavailableReason' => $pricing['reason'],
+            // 11Done's booking questions: the ones the property answers, and the rest for the landlord.
+            'fromProperty' => $pricing['from_property'],
+            'questions' => $pricing['questions'],
+            'answers' => (object) $pricing['answers'],
+            'needsAnswers' => $pricing['needs_answers'],
             'provider' => $pricing['provider'],
             'minDate' => $pricing['min_date'],
             'timeSlots' => $pricing['time_slots'],
@@ -117,10 +127,14 @@ class BookingController extends Controller
         $base = $request->validate([
             'propertyId' => ['required', Rule::exists('properties', 'id')->where('landlord_id', $landlord->id)->whereNull('archived_at')],
             'serviceType' => ['required', Rule::in(array_keys(config('lettingworld.certificate_types')))],
+            'answers' => ['nullable', 'array'],
         ], ['propertyId.exists' => 'Select one of your properties.'], ['propertyId' => 'property', 'serviceType' => 'service']);
 
         $property = Property::with('tenants')->findOrFail($base['propertyId']);
-        $pricing = $this->pricing($property, $base['serviceType']);
+        // Priced again here with the same answers, so the charge always matches 11Done's price.
+        // (Older app builds send no answers: use last time's, as their quote screen did.)
+        $answers = $request->has('answers') ? ($base['answers'] ?? []) : $this->lastAnswers($landlord, $property->id, $base['serviceType']);
+        $pricing = $this->pricing($property, $base['serviceType'], $answers);
         if (! $pricing['bookable']) {
             throw ValidationException::withMessages(['serviceType' => $pricing['reason'] ?? 'This service can’t be booked online.']);
         }
@@ -168,6 +182,7 @@ class BookingController extends Controller
             'payment_status' => $charge ? 'pending' : 'not_charged',
             'provider' => $pricing['provider'],
             'provider_service_id' => $pricing['service_id'],
+            'service_answers' => $pricing['answers'] ?: null,
             'sync_status' => $pricing['provider'] === '11done' ? 'pending' : 'not_required',
         ]);
         $booking->load('property.tenants');
@@ -220,11 +235,14 @@ class BookingController extends Controller
     }
 
     /**
-     * Price, dates and slots for a renewal at this property.
+     * Price, dates and slots for a renewal at this property. 11Done answers its own booking
+     * questions from the property where it can; the rest come back as "questions" for the landlord.
      *
-     * @return array{provider: string, service_id: ?int, price: ?float, bookable: bool, reason: ?string, min_date: string, time_slots: list<string>}
+     * @param  array<int|string, mixed>  $answers  the landlord's answers (question id => answer)
+     * @return array{provider: string, service_id: ?int, price: ?float, bookable: bool, reason: ?string, min_date: string, time_slots: list<string>,
+     *   questions: list<array>, from_property: list<array>, answers: array, needs_answers: bool}
      */
-    private function pricing(Property $property, string $type): array
+    private function pricing(Property $property, string $type, array $answers = []): array
     {
         $serviceId = $this->elevenDone->enabled() ? $this->elevenDone->serviceFor($type) : null;
 
@@ -237,7 +255,7 @@ class BookingController extends Controller
             $quote = ElevenDone::attempt(fn () => $this->elevenDone->quote($serviceId, $property->postcode, [
                 'bedrooms' => $property->bedrooms,
                 'property_type' => $property->property_type,
-            ]));
+            ], $answers));
         } catch (RuntimeException $e) {
             // 404: 11Done doesn't offer this service ID (wrong ELEVENDONE_SERVICE_* or switched off
             // in 11Done). The landlord can still book it; the team arranges it instead.
@@ -250,7 +268,7 @@ class BookingController extends Controller
             return [
                 'provider' => '11done', 'service_id' => $serviceId, 'price' => null, 'bookable' => false,
                 'reason' => $e->getMessage(), 'min_date' => today()->addDays(3)->toDateString(), 'time_slots' => Booking::TIME_SLOTS,
-            ];
+            ] + self::NO_QUESTIONS;
         }
 
         $bookable = (bool) ($quote['bookable'] ?? false);
@@ -264,7 +282,42 @@ class BookingController extends Controller
             'reason' => $quote['reason'] ?? null,
             'min_date' => $quote['min_date'] ?? today()->addDays(3)->toDateString(),
             'time_slots' => $quote['time_slots'] ?? Booking::TIME_SLOTS,
+            'from_property' => collect($quote['from_property'] ?? [])->map(fn ($a) => [
+                'question' => (string) ($a['question'] ?? ''),
+                'answer' => (string) ($a['answer'] ?? ''),
+            ])->values()->all(),
+            'questions' => collect($quote['questions'] ?? [])->map(fn ($q) => [
+                'id' => (string) $q['id'],
+                'title' => (string) $q['title'],
+                'type' => (string) $q['type'], // select | multi | quantity | number | text
+                'required' => (bool) ($q['required'] ?? false),
+                'options' => collect($q['options'] ?? [])->map(fn ($o) => [
+                    'id' => (string) $o['id'],
+                    'label' => (string) $o['label'],
+                    'price' => isset($o['price']) ? (float) $o['price'] : null,
+                    'quoteOnly' => (bool) ($o['quote_only'] ?? false),
+                ])->values()->all(),
+                'min' => $q['min'] ?? null,
+                'max' => $q['max'] ?? null,
+                'unitPrice' => isset($q['unit_price']) ? (float) $q['unit_price'] : null,
+            ])->values()->all(),
+            'answers' => (array) ($quote['answers'] ?? []),
+            'needs_answers' => (bool) ($quote['needs_answers'] ?? false),
         ];
+    }
+
+    private const NO_QUESTIONS = ['from_property' => [], 'questions' => [], 'answers' => [], 'needs_answers' => false];
+
+    /** What the landlord answered for this service at this property last time (11Done re-checks it). */
+    private function lastAnswers(User $landlord, int $propertyId, string $serviceType): array
+    {
+        return $landlord->bookings()
+            ->where('property_id', $propertyId)
+            ->where('service_type', $serviceType)
+            ->where('provider', '11done')
+            ->whereNotNull('service_answers')
+            ->latest('id')
+            ->first()?->service_answers ?? [];
     }
 
     /** A renewal the Letting World team arranges at its own price. */
@@ -280,7 +333,7 @@ class BookingController extends Controller
             'reason' => $price !== null ? null : Certificate::typeLabel($type).' can’t be booked online yet.',
             'min_date' => today()->addDays((int) config('lettingworld.manual_min_days'))->toDateString(),
             'time_slots' => Booking::TIME_SLOTS,
-        ];
+        ] + self::NO_QUESTIONS;
     }
 
     private function certificateFor(Property $property, string $type, ?string $certificateId): ?Certificate

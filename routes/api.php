@@ -93,7 +93,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('booking-services', [BookingController::class, 'services']);
         Route::get('bookings', [BookingController::class, 'index']);
-        Route::get('bookings/quote', [BookingController::class, 'quote']);
+        // POST carries the landlord's answers to 11Done's questions; GET kept for older app builds.
+        Route::match(['get', 'post'], 'bookings/quote', [BookingController::class, 'quote']);
         Route::post('bookings', [BookingController::class, 'store']);
         Route::post('bookings/{booking}/cancel', [BookingController::class, 'cancel']);
 
